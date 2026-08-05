@@ -1,0 +1,46 @@
+name: Test dry-run with sha256 checksum
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - id: action
+        uses: .
+        with:
+          bin: hello-world
+          manifest-path: tests/fixtures/rust-project/Cargo.toml
+          tar: unix
+          zip: none
+          checksum: sha256
+          dry-run: 'true'
+          dry-run-intended: 'true'
+          ref: refs/tags/v2.0.0
+
+      - name: Assert sha256 checksum output is set
+        env:
+          ARCHIVE: ${{ steps.action.outputs.archive }}
+          SHA256: ${{ steps.action.outputs.sha256 }}
+        run: |
+          echo "archive: $ARCHIVE"
+          echo "sha256: $SHA256"
+          if [ -z "$ARCHIVE" ]; then
+            echo "FAIL: expected 'archive' output to be set"
+            exit 1
+          fi
+          if [ -z "$SHA256" ]; then
+            echo "FAIL: expected 'sha256' output to be set"
+            exit 1
+          fi
+          if [[ "$SHA256" != *.sha256 ]]; then
+            echo "FAIL: expected sha256 output to end with '.sha256', got: $SHA256"
+            exit 1
+          fi
+          echo "PASS: archive=$ARCHIVE sha256=$SHA256"

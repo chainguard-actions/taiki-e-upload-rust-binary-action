@@ -1,0 +1,55 @@
+name: Test dry-run with tar=all and zip=all
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - id: action
+        uses: .
+        with:
+          bin: hello-world
+          manifest-path: tests/fixtures/rust-project/Cargo.toml
+          tar: all
+          zip: all
+          dry-run: 'true'
+          dry-run-intended: 'true'
+          ref: refs/tags/v4.0.0
+
+      - name: Assert both tar and zip outputs are set
+        env:
+          ARCHIVE: ${{ steps.action.outputs.archive }}
+          TAR: ${{ steps.action.outputs.tar }}
+          ZIP: ${{ steps.action.outputs.zip }}
+        run: |
+          echo "archive: $ARCHIVE"
+          echo "tar: $TAR"
+          echo "zip: $ZIP"
+          if [ -z "$ARCHIVE" ]; then
+            echo "FAIL: expected 'archive' output to be set"
+            exit 1
+          fi
+          if [ -z "$TAR" ]; then
+            echo "FAIL: expected 'tar' output to be set (tar=all should produce tar.gz on linux)"
+            exit 1
+          fi
+          if [[ "$TAR" != *.tar.gz ]]; then
+            echo "FAIL: expected tar output to end with '.tar.gz', got: $TAR"
+            exit 1
+          fi
+          if [ -z "$ZIP" ]; then
+            echo "FAIL: expected 'zip' output to be set (zip=all should produce zip on linux)"
+            exit 1
+          fi
+          if [[ "$ZIP" != *.zip ]]; then
+            echo "FAIL: expected zip output to end with '.zip', got: $ZIP"
+            exit 1
+          fi
+          echo "PASS: archive=$ARCHIVE tar=$TAR zip=$ZIP"

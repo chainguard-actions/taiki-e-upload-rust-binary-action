@@ -1,0 +1,45 @@
+name: Test dry-run with manifest_path alias input
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - id: action
+        uses: .
+        with:
+          bin: hello-world
+          manifest_path: tests/fixtures/rust-project/Cargo.toml
+          tar: unix
+          zip: none
+          dry-run: 'true'
+          dry-run-intended: 'true'
+          ref: refs/tags/v1.0.0
+
+      - name: Assert archive output is set
+        env:
+          ARCHIVE: ${{ steps.action.outputs.archive }}
+          TAR: ${{ steps.action.outputs.tar }}
+        run: |
+          echo "archive: $ARCHIVE"
+          echo "tar: $TAR"
+          if [ -z "$ARCHIVE" ]; then
+            echo "FAIL: expected 'archive' output to be set"
+            exit 1
+          fi
+          if [[ "$ARCHIVE" != hello-world-* ]]; then
+            echo "FAIL: expected archive to start with 'hello-world-', got: $ARCHIVE"
+            exit 1
+          fi
+          if [ -z "$TAR" ]; then
+            echo "FAIL: expected 'tar' output to be set"
+            exit 1
+          fi
+          echo "PASS: archive=$ARCHIVE tar=$TAR"
