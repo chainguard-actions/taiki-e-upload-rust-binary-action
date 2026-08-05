@@ -1,0 +1,77 @@
+name: Test dry-run with manifest-path input
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install dependencies
+        run: |
+          # Ensure jq is available (needed by the action for cargo metadata parsing)
+          if ! command -v jq &>/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq jq
+          fi
+
+      - name: Set up Rust
+        run: |
+          # Add common Rust installation paths to PATH for subsequent steps
+          for p in "$HOME/.cargo/bin" /usr/local/cargo/bin; do
+            if [ -d "$p" ] && ! echo "$PATH" | grep -q "$p"; then
+              echo "$p" >> "$GITHUB_PATH"
+            fi
+          done
+          # Install Rust via rustup if not already available
+          if ! command -v rustc &>/dev/null && ! [ -x "$HOME/.cargo/bin/rustc" ] && ! [ -x /usr/local/cargo/bin/rustc ]; then
+            curl -sSf --proto '=https' --tlsv1.2 https://sh.rustup.rs -o /tmp/rustup-init.sh
+            sh /tmp/rustup-init.sh -y --default-toolchain stable --profile minimal --no-modify-path
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          fi
+
+      - name: Verify toolchain
+        run: |
+          rustc --version
+          cargo --version
+          rustup --version || true
+          jq --version
+
+      - id: action
+        uses: .
+        with:
+          bin: hello-rust
+          manifest-path: tests/fixtures/hello-rust/Cargo.toml
+          target: x86_64-unknown-linux-gnu
+          tar: unix
+          zip: none
+          all-features: 'false'
+          dry-run: 'true'
+          dry-run-intended: 'true'
+          ref: refs/tags/v0.1.0
+
+      - name: Assert archive output is set
+        env:
+          ARCHIVE: ${{ steps.action.outputs.archive }}
+        run: |
+          echo "archive: $ARCHIVE"
+          if [ -z "$ARCHIVE" ]; then
+            echo "FAIL: expected 'archive' output to be set"
+            exit 1
+          fi
+          echo "PASS: archive output is '$ARCHIVE'"
+
+      - name: Assert tar.gz file was created
+        env:
+          TAR_OUT: ${{ steps.action.outputs.tar }}
+        run: |
+          echo "tar output: $TAR_OUT"
+          if [ -z "$TAR_OUT" ]; then
+            echo "FAIL: expected 'tar' output to be set"
+            exit 1
+          fi
+          if [ ! -f "$GITHUB_WORKSPACE/$TAR_OUT" ]; then
+            echo "FAIL: expected tar.gz file '$TAR_OUT' to exist at $GITHUB_WORKSPACE/$TAR_OUT"
+            exit 1
+          fi
+          echo "PASS: tar.gz file '$TAR_OUT' exists"

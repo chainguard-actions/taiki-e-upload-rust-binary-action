@@ -1,0 +1,68 @@
+name: Test invalid checksum input fails gracefully
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install dependencies
+        run: |
+          # Ensure jq is available (needed by the action for cargo metadata parsing)
+          if ! command -v jq &>/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq jq
+          fi
+
+      - name: Set up Rust
+        run: |
+          # Add common Rust installation paths to PATH for subsequent steps
+          for p in "$HOME/.cargo/bin" /usr/local/cargo/bin; do
+            if [ -d "$p" ] && ! echo "$PATH" | grep -q "$p"; then
+              echo "$p" >> "$GITHUB_PATH"
+            fi
+          done
+          # Install Rust via rustup if not already available
+          if ! command -v rustc &>/dev/null && ! [ -x "$HOME/.cargo/bin/rustc" ] && ! [ -x /usr/local/cargo/bin/rustc ]; then
+            curl -sSf --proto '=https' --tlsv1.2 https://sh.rustup.rs -o /tmp/rustup-init.sh
+            sh /tmp/rustup-init.sh -y --default-toolchain stable --profile minimal --no-modify-path
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          fi
+
+      - name: Verify toolchain
+        run: |
+          rustc --version
+          cargo --version
+          rustup --version || true
+          jq --version
+
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          bin: hello-rust
+          manifest-path: tests/fixtures/hello-rust/Cargo.toml
+          target: x86_64-unknown-linux-gnu
+          tar: unix
+          zip: none
+          checksum: invalid-algo
+          all-features: 'false'
+          dry-run: 'true'
+          dry-run-intended: 'true'
+          ref: refs/tags/v0.1.0
+
+      - name: Assert action failed due to invalid checksum
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          if [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action correctly failed with invalid checksum algorithm"
+          elif [ "$OUTCOME" = "success" ]; then
+            echo "FAIL: action should have failed with invalid checksum 'invalid-algo'"
+            exit 1
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi
