@@ -1,0 +1,65 @@
+name: Test basic dry-run build
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - id: action
+        uses: .
+        with:
+          bin: hello-world
+          manifest-path: ${{ github.workspace }}/tests/fixtures/rust-project/Cargo.toml
+          tar: unix
+          zip: none
+          ref: refs/tags/v0.1.0
+          dry-run: true
+          dry-run-intended: true
+
+      - name: Assert archive output is set
+        env:
+          ARCHIVE: ${{ steps.action.outputs.archive }}
+        run: |
+          echo "archive: $ARCHIVE"
+          if [ -z "$ARCHIVE" ]; then
+            echo "FAIL: expected 'archive' output to be set"
+            exit 1
+          fi
+          echo "PASS: archive output is '$ARCHIVE'"
+
+      - name: Assert tar output is set
+        env:
+          TAR: ${{ steps.action.outputs.tar }}
+        run: |
+          echo "tar: $TAR"
+          if [ -z "$TAR" ]; then
+            echo "FAIL: expected 'tar' output to be set"
+            exit 1
+          fi
+          if [[ "$TAR" != *.tar.gz ]]; then
+            echo "FAIL: expected tar output to end with .tar.gz, got '$TAR'"
+            exit 1
+          fi
+          echo "PASS: tar output is '$TAR'"
+
+      - name: Assert tar.gz archive file exists
+        env:
+          TAR: ${{ steps.action.outputs.tar }}
+        run: |
+          echo "Checking for file: $TAR"
+          if [ -f "$GITHUB_WORKSPACE/$TAR" ]; then
+            echo "PASS: tar.gz file exists at $GITHUB_WORKSPACE/$TAR"
+          elif [ -f "$TAR" ]; then
+            echo "PASS: tar.gz file exists at $TAR"
+          else
+            echo "FAIL: expected tar.gz file '$TAR' to exist (checked both relative and absolute)"
+            ls -la "$GITHUB_WORKSPACE"/*.tar.gz 2>/dev/null || echo "No .tar.gz files found in workspace"
+            exit 1
+          fi

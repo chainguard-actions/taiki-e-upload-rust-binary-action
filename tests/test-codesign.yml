@@ -1,0 +1,65 @@
+name: Test codesign inputs in dry-run mode
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Test with codesign inputs (hyphen form)
+        id: action-codesign-hyphen
+        uses: .
+        with:
+          bin: hello-world
+          manifest-path: ${{ github.workspace }}/tests/fixtures/rust-project/Cargo.toml
+          codesign: 'false'
+          codesign-prefix: com.example
+          codesign-options: runtime
+          tar: unix
+          zip: none
+          ref: refs/tags/v0.1.0
+          dry-run: true
+          dry-run-intended: true
+
+      - name: Assert archive output is set (codesign hyphen)
+        env:
+          ARCHIVE: ${{ steps.action-codesign-hyphen.outputs.archive }}
+        run: |
+          echo "archive: $ARCHIVE"
+          if [ -z "$ARCHIVE" ]; then
+            echo "FAIL: expected 'archive' output to be set"
+            exit 1
+          fi
+          echo "PASS: archive output is '$ARCHIVE'"
+
+      - name: Test with codesign inputs (underscore alias form)
+        id: action-codesign-underscore
+        uses: .
+        with:
+          bin: hello-world
+          manifest-path: ${{ github.workspace }}/tests/fixtures/rust-project/Cargo.toml
+          codesign: 'false'
+          codesign_prefix: com.example
+          codesign_options: runtime
+          tar: unix
+          zip: none
+          ref: refs/tags/v0.1.0
+          dry-run: true
+          dry-run-intended: true
+
+      - name: Assert archive output is set (codesign underscore)
+        env:
+          ARCHIVE: ${{ steps.action-codesign-underscore.outputs.archive }}
+        run: |
+          echo "archive: $ARCHIVE"
+          if [ -z "$ARCHIVE" ]; then
+            echo "FAIL: expected 'archive' output to be set"
+            exit 1
+          fi
+          echo "PASS: archive output is '$ARCHIVE'"

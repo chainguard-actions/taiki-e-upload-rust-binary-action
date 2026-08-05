@@ -1,0 +1,66 @@
+name: Test tar-xz archive creation in dry-run mode
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - id: action
+        uses: .
+        with:
+          bin: hello-world
+          manifest-path: ${{ github.workspace }}/tests/fixtures/rust-project/Cargo.toml
+          tar: none
+          tar-xz: all
+          zip: none
+          ref: refs/tags/v0.1.0
+          dry-run: true
+          dry-run-intended: true
+
+      - name: Assert archive output is set
+        env:
+          ARCHIVE: ${{ steps.action.outputs.archive }}
+        run: |
+          echo "archive: $ARCHIVE"
+          if [ -z "$ARCHIVE" ]; then
+            echo "FAIL: expected 'archive' output to be set"
+            exit 1
+          fi
+          echo "PASS: archive output is '$ARCHIVE'"
+
+      - name: Assert tar-xz output is set
+        env:
+          TAR_XZ: ${{ steps.action.outputs.tar-xz }}
+        run: |
+          echo "tar-xz: $TAR_XZ"
+          if [ -z "$TAR_XZ" ]; then
+            echo "FAIL: expected 'tar-xz' output to be set"
+            exit 1
+          fi
+          if [[ "$TAR_XZ" != *.tar.xz ]]; then
+            echo "FAIL: expected tar-xz output to end with .tar.xz, got '$TAR_XZ'"
+            exit 1
+          fi
+          echo "PASS: tar-xz output is '$TAR_XZ'"
+
+      - name: Assert tar.xz archive file exists
+        env:
+          TAR_XZ: ${{ steps.action.outputs.tar-xz }}
+        run: |
+          echo "Checking for file: $TAR_XZ"
+          if [ -f "$GITHUB_WORKSPACE/$TAR_XZ" ]; then
+            echo "PASS: tar.xz file exists at $GITHUB_WORKSPACE/$TAR_XZ"
+          elif [ -f "$TAR_XZ" ]; then
+            echo "PASS: tar.xz file exists at $TAR_XZ"
+          else
+            echo "FAIL: expected tar.xz file '$TAR_XZ' to exist"
+            ls -la "$GITHUB_WORKSPACE"/*.tar.xz 2>/dev/null || echo "No .tar.xz files found in workspace"
+            exit 1
+          fi

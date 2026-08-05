@@ -1,0 +1,57 @@
+name: Test checksum sha256 in dry-run mode
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - id: action
+        uses: .
+        with:
+          bin: hello-world
+          manifest-path: ${{ github.workspace }}/tests/fixtures/rust-project/Cargo.toml
+          tar: unix
+          zip: none
+          checksum: sha256
+          ref: refs/tags/v0.1.0
+          dry-run: true
+          dry-run-intended: true
+
+      - name: Assert sha256 output is set
+        env:
+          SHA256: ${{ steps.action.outputs.sha256 }}
+        run: |
+          echo "sha256: $SHA256"
+          if [ -z "$SHA256" ]; then
+            echo "FAIL: expected 'sha256' output to be set"
+            exit 1
+          fi
+          if [[ "$SHA256" != *.sha256 ]]; then
+            echo "FAIL: expected sha256 output to end with .sha256, got '$SHA256'"
+            exit 1
+          fi
+          echo "PASS: sha256 output is '$SHA256'"
+
+      - name: Assert sha256 checksum file exists
+        env:
+          SHA256: ${{ steps.action.outputs.sha256 }}
+        run: |
+          echo "Checking for file: $SHA256"
+          if [ -f "$GITHUB_WORKSPACE/$SHA256" ]; then
+            echo "PASS: sha256 checksum file exists at $GITHUB_WORKSPACE/$SHA256"
+            cat "$GITHUB_WORKSPACE/$SHA256"
+          elif [ -f "$SHA256" ]; then
+            echo "PASS: sha256 checksum file exists at $SHA256"
+            cat "$SHA256"
+          else
+            echo "FAIL: expected sha256 checksum file '$SHA256' to exist"
+            ls -la "$GITHUB_WORKSPACE"/*.sha256 2>/dev/null || echo "No .sha256 files found in workspace"
+            exit 1
+          fi

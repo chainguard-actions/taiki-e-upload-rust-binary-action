@@ -1,0 +1,51 @@
+name: Test package input in dry-run mode
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - id: action
+        uses: .
+        with:
+          bin: hello-world
+          package: hello-world
+          manifest-path: ${{ github.workspace }}/tests/fixtures/rust-workspace/Cargo.toml
+          tar: unix
+          zip: none
+          ref: refs/tags/v0.1.0
+          dry-run: true
+          dry-run-intended: true
+
+      - name: Assert archive output is set
+        env:
+          ARCHIVE: ${{ steps.action.outputs.archive }}
+        run: |
+          echo "archive: $ARCHIVE"
+          if [ -z "$ARCHIVE" ]; then
+            echo "FAIL: expected 'archive' output to be set"
+            exit 1
+          fi
+          echo "PASS: archive output is '$ARCHIVE'"
+
+      - name: Assert tar output is set
+        env:
+          TAR: ${{ steps.action.outputs.tar }}
+        run: |
+          echo "tar: $TAR"
+          if [ -z "$TAR" ]; then
+            echo "FAIL: expected 'tar' output to be set"
+            exit 1
+          fi
+          if [[ "$TAR" != *.tar.gz ]]; then
+            echo "FAIL: expected tar output to end with .tar.gz, got '$TAR'"
+            exit 1
+          fi
+          echo "PASS: tar output is '$TAR'"
