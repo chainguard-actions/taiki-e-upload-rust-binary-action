@@ -1,0 +1,68 @@
+name: Test dry-run with explicit build-tool and build_tool alias
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Set up minimal Rust project
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/test-project/src"
+          cp "$GITHUB_WORKSPACE/tests/fixtures/hello-bin/Cargo.toml" "$GITHUB_WORKSPACE/test-project/Cargo.toml"
+          cp "$GITHUB_WORKSPACE/tests/fixtures/hello-bin/src/main.rs" "$GITHUB_WORKSPACE/test-project/src/main.rs"
+
+      - id: action
+        uses: .
+        with:
+          bin: hello-bin
+          manifest-path: test-project/Cargo.toml
+          build-tool: cargo
+          build_tool: cargo
+          tar: unix
+          zip: none
+          dry-run: 'true'
+          dry-run-intended: 'true'
+
+      - name: Assert archive output is set
+        env:
+          ARCHIVE: ${{ steps.action.outputs.archive }}
+        run: |
+          echo "archive: $ARCHIVE"
+          if [ -z "$ARCHIVE" ]; then
+            echo "FAIL: expected 'archive' output to be non-empty"
+            exit 1
+          fi
+          echo "PASS: archive output is '$ARCHIVE'"
+
+      - name: Assert tar output is set
+        env:
+          TAR: ${{ steps.action.outputs.tar }}
+        run: |
+          echo "tar: $TAR"
+          if [ -z "$TAR" ]; then
+            echo "FAIL: expected 'tar' output to be non-empty"
+            exit 1
+          fi
+          if [[ "$TAR" != *.tar.gz ]]; then
+            echo "FAIL: expected tar output to end with .tar.gz, got '$TAR'"
+            exit 1
+          fi
+          echo "PASS: tar output is '$TAR'"
+
+      - name: Assert tar.gz archive file exists
+        env:
+          TAR: ${{ steps.action.outputs.tar }}
+        run: |
+          echo "Checking for file: $TAR"
+          if [ ! -f "$GITHUB_WORKSPACE/$TAR" ]; then
+            echo "FAIL: expected archive file '$TAR' to exist"
+            exit 1
+          fi
+          echo "PASS: archive file exists"

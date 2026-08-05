@@ -1,0 +1,77 @@
+name: Test dry-run with zip archive
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Set up minimal Rust project
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/test-project/src"
+          cp "$GITHUB_WORKSPACE/tests/fixtures/hello-bin/Cargo.toml" "$GITHUB_WORKSPACE/test-project/Cargo.toml"
+          cp "$GITHUB_WORKSPACE/tests/fixtures/hello-bin/src/main.rs" "$GITHUB_WORKSPACE/test-project/src/main.rs"
+
+      - id: action
+        uses: .
+        with:
+          bin: hello-bin
+          manifest-path: test-project/Cargo.toml
+          tar: none
+          zip: all
+          dry-run: 'true'
+          dry-run-intended: 'true'
+
+      - name: Assert archive output is set
+        env:
+          ARCHIVE: ${{ steps.action.outputs.archive }}
+        run: |
+          echo "archive: $ARCHIVE"
+          if [ -z "$ARCHIVE" ]; then
+            echo "FAIL: expected 'archive' output to be non-empty"
+            exit 1
+          fi
+          echo "PASS: archive output is '$ARCHIVE'"
+
+      - name: Assert zip output is set
+        env:
+          ZIP: ${{ steps.action.outputs.zip }}
+        run: |
+          echo "zip: $ZIP"
+          if [ -z "$ZIP" ]; then
+            echo "FAIL: expected 'zip' output to be non-empty"
+            exit 1
+          fi
+          if [[ "$ZIP" != *.zip ]]; then
+            echo "FAIL: expected zip output to end with .zip, got '$ZIP'"
+            exit 1
+          fi
+          echo "PASS: zip output is '$ZIP'"
+
+      - name: Assert tar output is empty (tar=none)
+        env:
+          TAR: ${{ steps.action.outputs.tar }}
+        run: |
+          echo "tar: '$TAR'"
+          if [ -n "$TAR" ]; then
+            echo "FAIL: expected 'tar' output to be empty when tar=none, got '$TAR'"
+            exit 1
+          fi
+          echo "PASS: tar output is empty as expected"
+
+      - name: Assert zip archive file exists on disk
+        env:
+          ZIP: ${{ steps.action.outputs.zip }}
+        run: |
+          echo "Checking for file: $ZIP"
+          if [ ! -f "$GITHUB_WORKSPACE/$ZIP" ]; then
+            echo "FAIL: expected zip archive file '$ZIP' to exist on disk"
+            exit 1
+          fi
+          echo "PASS: zip archive file exists"

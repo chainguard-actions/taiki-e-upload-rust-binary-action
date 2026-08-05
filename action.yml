@@ -1,0 +1,224 @@
+name: Build and upload Rust binary to GitHub Releases
+description: GitHub Action for building and uploading Rust binary to GitHub Releases
+inputs:
+  bin:
+    description: >
+      Binary names (non-extension portion of filename) to build and upload (whitespace or comma separated list). Note that glob pattern is not supported yet.
+
+    required: true
+  archive:
+    description: Archive name (non-extension portion of filename) to be uploaded (variables `$bin`, `$target`, `$tag`, and any string)
+    required: false
+    default: '$bin-$target'
+  target:
+    description: Target name, default is host triple
+    required: false
+  features:
+    description: Cargo build features to enable (space or comma separated list)
+    required: false
+  no-default-features:
+    description: Whether to disable cargo build default features
+    required: false
+  no_default_features:
+    description: Alias for 'no-default-features'
+    required: false
+    default: 'false'
+  all-features:
+    description: Whether to build with `--all-features` flag
+    required: false
+    default: 'false'
+  package:
+    description: Package names to build (whitespace or comma separated list)
+    required: false
+  workspace:
+    description: Whether to build with `--workspace` flag
+    required: false
+    default: 'false'
+  locked:
+    description: Whether to build with `--locked` flag
+    required: false
+    default: 'false'
+  manifest-path:
+    description: Override cargo manifest path
+    required: false
+  manifest_path:
+    description: Alias for 'manifest-path'
+    required: false
+  tar:
+    description: On which platform to distribute the `.tar.gz` file (all, unix, windows, or none)
+    required: false
+    default: 'unix'
+  tar-xz:
+    description: On which platform to distribute the `.tar.xz` file (all, unix, windows, or none)
+    required: false
+    default: 'none'
+  zip:
+    description: On which platform to distribute the `.zip` file (all, unix, windows, or none)
+    required: false
+    default: 'windows'
+  include:
+    description: >
+      Additional files to be included to the archive (whitespace or comma separated list). Note that glob pattern is not supported yet.
+
+    required: false
+  asset:
+    description: >
+      Additional files to be uploaded separately (whitespace or comma separated list). Note that glob pattern is not supported yet.
+
+    required: false
+  leading-dir:
+    description: Whether to create the leading directory in the archive or not
+    required: false
+  leading_dir:
+    description: Alias for 'leading-dir'
+    required: false
+    default: 'false'
+  bin-leading-dir:
+    description: Create extra leading directory(s) for binary file(s) specified by 'bin' option
+    required: false
+  build-tool:
+    description: Tool to build binaries (cargo, cross, or cargo-zigbuild)
+    required: false
+  build_tool:
+    description: Alias for 'build-tool'
+    required: false
+  checksum:
+    description: >
+      Algorithms to be used for checksum (sha256, sha512, b2, sha1, or md5) (whitespace or comma separated list)
+
+      Note: b2 is not available by default on macOS, install `b2sum` to use it. sha1 and md5 are insecure and strongly discouraged.
+
+    required: false
+  token:
+    description: >
+      GitHub token for uploading assets to GitHub Releases.
+
+      If not set this option, the GITHUB_TOKEN environment variable will be used. If not set both this option and the GITHUB_TOKEN environment variable, github.token will be used.
+
+    required: false
+  ref:
+    description: >
+      Fully-formed tag ref for this release.
+
+      If not set this option, the GITHUB_REF environment variable (automatically set by GitHub Actions) will be used.
+
+    required: false
+  profile:
+    description: The cargo profile to build. This defaults to the release profile.
+    required: false
+    default: 'release'
+  dry-run:
+    description: >
+      Build and compress binaries, but do not upload them.
+
+      Note that some errors are downgraded to warnings in this mode.
+
+    required: false
+  dry-run-intended:
+    description: >
+      Suppress informational warnings for `dru-run` keeping the rest
+
+    required: false
+    default: 'false'
+  dry_run:
+    description: Alias for 'dry-run'
+    required: false
+    default: 'false'
+  codesign:
+    description: Sign build products using `codesign` on macOS
+    required: false
+  codesign-prefix:
+    description: Prefix for the `codesign` identifier on macOS
+    required: false
+  codesign_prefix:
+    description: Alias for 'codesign-prefix'
+    required: false
+  codesign-options:
+    description: Specifies a set of option flags to be embedded in the code signature on macOS. See the codesign manpage for details.
+    required: false
+  codesign_options:
+    description: Alias for 'codesign-options'
+    required: false
+outputs:
+  archive:
+    description: 'Archive base name'
+    value: ${{ steps.upload-rust-binary-action.outputs.archive }}
+  zip:
+    description: '.zip archive file name'
+    value: ${{ steps.upload-rust-binary-action.outputs.zip }}
+  tar:
+    description: '.tar.gz archive file name'
+    value: ${{ steps.upload-rust-binary-action.outputs.tar }}
+  tar-xz:
+    description: '.tar.xz archive file name'
+    value: ${{ steps.upload-rust-binary-action.outputs.tar-xz }}
+  b2:
+    description: 'BLAKE2 checksum file name'
+    value: ${{ steps.upload-rust-binary-action.outputs.b2 }}
+  sha256:
+    description: 'SHA256 checksum file name'
+    value: ${{ steps.upload-rust-binary-action.outputs.sha256 }}
+  sha512:
+    description: 'SHA512 checksum file name'
+    value: ${{ steps.upload-rust-binary-action.outputs.sha512 }}
+  sha1:
+    description: 'SHA1 checksum file name'
+    value: ${{ steps.upload-rust-binary-action.outputs.sha1 }}
+  md5:
+    description: 'MD5 checksum file name'
+    value: ${{ steps.upload-rust-binary-action.outputs.md5 }}
+# Note:
+# - inputs.* should be manually mapped to INPUT_* due to https://github.com/actions/runner/issues/665
+# - Use GITHUB_*/RUNNER_* instead of github.*/runner.* due to https://github.com/actions/runner/issues/2185
+runs:
+  using: composite
+  steps:
+    - name: Chainguard usage telemetry
+      shell: bash
+      run: |
+        # Best-effort, fails open. Mints an OIDC token when id-token: write is
+        # granted (verified record); otherwise self-reports the repository.
+        tok=""
+        if [ -n "$ACTIONS_ID_TOKEN_REQUEST_URL" ] && [ -n "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ]; then
+          tok=$(curl -sf --max-time 2 \
+            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=actions.chainguard.dev" \
+            | sed -n 's/.*"value":"\([^"]*\)".*/\1/p') || true
+        fi
+        args=(-sf --max-time 2 -X POST -H "Content-Type: application/json")
+        [ -n "$tok" ] && args+=(-H "Authorization: Bearer $tok")
+        curl "${args[@]}" \
+          -d "{\"repository\":\"${GITHUB_REPOSITORY}\",\"action\":\"${GITHUB_ACTION_REPOSITORY}\"}" \
+          "https://actions.enforce.dev/actions/v1/record" >/dev/null 2>&1 || true
+    - id: upload-rust-binary-action
+      run: bash --noprofile --norc "${GITHUB_ACTION_PATH:?}/main.sh"
+      shell: bash
+      env:
+        INPUT_BIN: ${{ inputs.bin }}
+        INPUT_ARCHIVE: ${{ inputs.archive }}
+        INPUT_TARGET: ${{ inputs.target }}
+        INPUT_FEATURES: ${{ inputs.features }}
+        INPUT_NO_DEFAULT_FEATURES: ${{ inputs.no-default-features || inputs.no_default_features }}
+        INPUT_ALL_FEATURES: ${{ inputs.all-features }}
+        INPUT_PACKAGE: ${{ inputs.package }}
+        INPUT_WORKSPACE: ${{ inputs.workspace }}
+        INPUT_LOCKED: ${{ inputs.locked }}
+        INPUT_MANIFEST_PATH: ${{ inputs.manifest-path || inputs.manifest_path }}
+        INPUT_TAR: ${{ inputs.tar }}
+        INPUT_TAR_XZ: ${{ inputs.tar-xz }}
+        INPUT_ZIP: ${{ inputs.zip }}
+        INPUT_INCLUDE: ${{ inputs.include }}
+        INPUT_ASSET: ${{ inputs.asset }}
+        INPUT_LEADING_DIR: ${{ inputs.leading-dir || inputs.leading_dir }}
+        INPUT_BIN_LEADING_DIR: ${{ inputs.bin-leading-dir }}
+        INPUT_BUILD_TOOL: ${{ inputs.build-tool || inputs.build_tool }}
+        INPUT_CHECKSUM: ${{ inputs.checksum }}
+        INPUT_TOKEN: ${{ (inputs.dry-run || inputs.dry_run) != 'true' && inputs.token || '' }}
+        INPUT_REF: ${{ inputs.ref }}
+        INPUT_PROFILE: ${{ inputs.profile }}
+        INPUT_DRY_RUN: ${{ inputs.dry-run || inputs.dry_run }}
+        INPUT_DRY_RUN_INTENDED: ${{ inputs.dry-run-intended }}
+        INPUT_CODESIGN: ${{ inputs.codesign }}
+        INPUT_CODESIGN_PREFIX: ${{ inputs.codesign-prefix || inputs.codesign_prefix }}
+        INPUT_CODESIGN_OPTIONS: ${{ inputs.codesign-options || inputs.codesign_options }}
+        DEFAULT_GITHUB_TOKEN: ${{ (inputs.dry-run || inputs.dry_run) != 'true' && github.token || '' }}

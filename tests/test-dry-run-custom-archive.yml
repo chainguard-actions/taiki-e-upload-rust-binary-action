@@ -1,0 +1,69 @@
+name: Test dry-run with custom archive name
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Set up minimal Rust project
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/test-project/src"
+          cp "$GITHUB_WORKSPACE/tests/fixtures/hello-bin/Cargo.toml" "$GITHUB_WORKSPACE/test-project/Cargo.toml"
+          cp "$GITHUB_WORKSPACE/tests/fixtures/hello-bin/src/main.rs" "$GITHUB_WORKSPACE/test-project/src/main.rs"
+
+      - id: action
+        uses: .
+        with:
+          bin: hello-bin
+          manifest-path: test-project/Cargo.toml
+          archive: '$bin-$tag-$target'
+          tar: unix
+          zip: none
+          dry-run: 'true'
+          dry-run-intended: 'true'
+
+      - name: Assert archive output contains expected parts
+        env:
+          ARCHIVE: ${{ steps.action.outputs.archive }}
+        run: |
+          echo "archive: $ARCHIVE"
+          if [ -z "$ARCHIVE" ]; then
+            echo "FAIL: expected 'archive' output to be non-empty"
+            exit 1
+          fi
+          # Archive should start with the binary name
+          if [[ "$ARCHIVE" != hello-bin-* ]]; then
+            echo "FAIL: expected archive to start with 'hello-bin-', got '$ARCHIVE'"
+            exit 1
+          fi
+          # In dry-run mode without a real tag ref, the tag becomes 'dry-run'
+          if [[ "$ARCHIVE" != *dry-run* ]]; then
+            echo "FAIL: expected archive to contain 'dry-run' (the dry-run tag), got '$ARCHIVE'"
+            exit 1
+          fi
+          echo "PASS: archive output is '$ARCHIVE'"
+
+      - name: Assert tar output matches archive name
+        env:
+          ARCHIVE: ${{ steps.action.outputs.archive }}
+          TAR: ${{ steps.action.outputs.tar }}
+        run: |
+          echo "archive: $ARCHIVE"
+          echo "tar: $TAR"
+          if [ -z "$TAR" ]; then
+            echo "FAIL: expected 'tar' output to be non-empty"
+            exit 1
+          fi
+          EXPECTED="${ARCHIVE}.tar.gz"
+          if [ "$TAR" != "$EXPECTED" ]; then
+            echo "FAIL: expected tar output to be '$EXPECTED', got '$TAR'"
+            exit 1
+          fi
+          echo "PASS: tar output matches archive name"
