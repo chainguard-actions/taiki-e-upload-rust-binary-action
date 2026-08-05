@@ -1,0 +1,53 @@
+name: Test dry-run with bin-leading-dir input
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Copy Rust fixture project into workspace
+        run: |
+          cp -r "$GITHUB_WORKSPACE/tests/fixtures/rust-hello" "$GITHUB_WORKSPACE/rust-hello"
+
+      - id: action
+        uses: .
+        with:
+          bin: hello
+          manifest-path: rust-hello/Cargo.toml
+          bin-leading-dir: bin
+          tar: unix
+          zip: none
+          dry-run: 'true'
+          dry-run-intended: 'true'
+
+      - name: Assert archive output is set
+        env:
+          ARCHIVE: ${{ steps.action.outputs.archive }}
+        run: |
+          echo "archive: $ARCHIVE"
+          if [ -z "$ARCHIVE" ]; then
+            echo "FAIL: expected 'archive' output to be non-empty"
+            exit 1
+          fi
+          echo "PASS: archive output is '$ARCHIVE'"
+
+      - name: Assert tar.gz archive file exists
+        env:
+          ARCHIVE: ${{ steps.action.outputs.archive }}
+        run: |
+          echo "Checking for ${ARCHIVE}.tar.gz"
+          if [ ! -f "${ARCHIVE}.tar.gz" ]; then
+            echo "FAIL: expected archive file '${ARCHIVE}.tar.gz' not found"
+            ls -la *.tar.gz 2>/dev/null || echo "(no .tar.gz files found)"
+            exit 1
+          fi
+          echo "Archive contents:"
+          tar tzf "${ARCHIVE}.tar.gz"
+          echo "PASS: archive file '${ARCHIVE}.tar.gz' exists"

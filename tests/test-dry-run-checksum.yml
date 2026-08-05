@@ -1,0 +1,52 @@
+name: Test dry-run with checksum
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Copy Rust fixture project into workspace
+        run: |
+          cp -r "$GITHUB_WORKSPACE/tests/fixtures/rust-hello" "$GITHUB_WORKSPACE/rust-hello"
+
+      - id: action
+        uses: .
+        with:
+          bin: hello
+          manifest-path: rust-hello/Cargo.toml
+          tar: unix
+          zip: none
+          checksum: sha256
+          dry-run: 'true'
+          dry-run-intended: 'true'
+
+      - name: Assert sha256 output is set
+        env:
+          SHA256: ${{ steps.action.outputs.sha256 }}
+        run: |
+          echo "sha256: $SHA256"
+          if [ -z "$SHA256" ]; then
+            echo "FAIL: expected 'sha256' output to be non-empty"
+            exit 1
+          fi
+          echo "PASS: sha256 output is '$SHA256'"
+
+      - name: Assert sha256 checksum file exists
+        env:
+          ARCHIVE: ${{ steps.action.outputs.archive }}
+        run: |
+          echo "Checking for ${ARCHIVE}.sha256"
+          if [ ! -f "${ARCHIVE}.sha256" ]; then
+            echo "FAIL: expected checksum file '${ARCHIVE}.sha256' not found"
+            ls -la *.sha256 2>/dev/null || echo "(no .sha256 files found)"
+            exit 1
+          fi
+          echo "PASS: checksum file '${ARCHIVE}.sha256' exists"
+          cat "${ARCHIVE}.sha256"

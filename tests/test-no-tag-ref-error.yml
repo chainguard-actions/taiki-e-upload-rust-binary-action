@@ -1,0 +1,40 @@
+name: Test error when no tag ref and not dry-run
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Copy Rust fixture project into workspace
+        run: |
+          cp -r "$GITHUB_WORKSPACE/tests/fixtures/rust-hello" "$GITHUB_WORKSPACE/rust-hello"
+
+      # Without dry-run and without a tag ref, the action should fail because
+      # GITHUB_REF under act is refs/heads/act-harness (not a tag ref).
+      # The action bails early: "tag ref should start with 'refs/tags/'"
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          bin: hello
+          manifest-path: rust-hello/Cargo.toml
+          tar: unix
+          zip: none
+          # dry-run is false (default), so the action should bail on non-tag ref
+
+      - name: Assert action failed due to non-tag ref
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          if [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action correctly failed when GITHUB_REF is not a tag ref"
+          elif [ "$OUTCOME" = "success" ]; then
+            echo "FAIL: action should have failed when GITHUB_REF is not a tag ref"
+            exit 1
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi

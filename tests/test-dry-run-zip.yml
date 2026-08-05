@@ -1,0 +1,65 @@
+name: Test dry-run with zip archive
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Install zip
+        run: sudo apt-get install -y zip
+
+      - name: Copy Rust fixture project into workspace
+        run: |
+          cp -r "$GITHUB_WORKSPACE/tests/fixtures/rust-hello" "$GITHUB_WORKSPACE/rust-hello"
+
+      - id: action
+        uses: .
+        with:
+          bin: hello
+          manifest-path: rust-hello/Cargo.toml
+          tar: none
+          zip: all
+          dry-run: 'true'
+          dry-run-intended: 'true'
+
+      - name: Assert archive output is set
+        env:
+          ARCHIVE: ${{ steps.action.outputs.archive }}
+        run: |
+          echo "archive: $ARCHIVE"
+          if [ -z "$ARCHIVE" ]; then
+            echo "FAIL: expected 'archive' output to be non-empty"
+            exit 1
+          fi
+          echo "PASS: archive output is '$ARCHIVE'"
+
+      - name: Assert zip output is set
+        env:
+          ZIP: ${{ steps.action.outputs.zip }}
+        run: |
+          echo "zip: $ZIP"
+          if [ -z "$ZIP" ]; then
+            echo "FAIL: expected 'zip' output to be non-empty"
+            exit 1
+          fi
+          echo "PASS: zip output is '$ZIP'"
+
+      - name: Assert zip archive file exists
+        env:
+          ARCHIVE: ${{ steps.action.outputs.archive }}
+        run: |
+          echo "Checking for ${ARCHIVE}.zip"
+          if [ ! -f "${ARCHIVE}.zip" ]; then
+            echo "FAIL: expected zip file '${ARCHIVE}.zip' not found"
+            ls -la *.zip 2>/dev/null || echo "(no .zip files found)"
+            exit 1
+          fi
+          echo "PASS: zip file '${ARCHIVE}.zip' exists"
+          unzip -l "${ARCHIVE}.zip"
