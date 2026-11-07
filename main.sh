@@ -291,8 +291,6 @@ fi
 archive="${archive/\$bin/${bin_names[0]}}"
 archive="${archive/\$target/${target}}"
 archive="${archive/\$tag/${tag}}"
-# Sanitize archive to prevent newline injection into $GITHUB_OUTPUT / $GITHUB_ENV.
-archive="$(printf '%s' "${archive}" | tr -d '\n\r')"
 
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
   printf 'archive=%s\n' "${archive}" >>"${GITHUB_OUTPUT}"
